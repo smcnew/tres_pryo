@@ -1,5 +1,5 @@
 
-# Analysis of pyrosequencing data from McNew et al. 2023
+# Analysis of pyrosequencing data from McNew et al. 2024
 
 library(tidyr) # data manipulation
 library(dplyr) # data manipulation
@@ -33,9 +33,7 @@ ds <- mutate(ds, Capture = as.factor(Capture))
 # Coordinate data from samples: what parts of genes were sequenced?
 input_samples <- read.delim("raw_data/input_CpGs.txt") %>% rename(cpg = CpG) %>%
   select(-Note)# new = old
-head(input_samples)
-table(input_samples$Gene) # loci per gene
-
+input_samples %>% select(MeanMeth) %>% summary
 # Pivot table longer, add information for gene
 
 ds_long <- pivot_longer(ds, cols = !c(SampleID, BibB1, Band, Year, Capture, Treatment),
@@ -48,9 +46,7 @@ ds_long <- pivot_longer(ds, cols = !c(SampleID, BibB1, Band, Year, Capture, Trea
 head(ds_long)
 
 # Covariates for fledging success and cort
-covars <- read.delim("raw_data/Input_Cort_Fled.txt") %>% rename(Band = fband) %>%
-  mutate(Capture = as.factor(Capture)) %>% filter(year == "2017")
-
+covars <- read.csv("raw_data/covars_updated.csv") %>% mutate(Capture = as.factor(Capture))
 ds_long <- left_join(ds_long, covars) %>% as.data.frame() # add covars to meth data
 
 
@@ -117,8 +113,34 @@ colnames(methylationsummary) <- c("min", "first", "median", "mean", "third", "ma
 methylationsummary <- methylationsummary %>% mutate(n = 121 - nas )
 methylationsummary %>% pull(n) %>% fivenum
 methylationsummary %>% pull(mean) %>% fivenum
+
 # write out summary for supplement
 methylationsummary %>% select(-nas) %>% write.csv("output_plots/methylationsummary.csv")
+
+
+
+# Cort and treatment ------------------------------------------------------
+
+
+covars %>%
+  filter(Capture == 1)  %>%
+  lm(base ~ Treatment + BibB1, data = .) %>% summary
+
+covars %>%
+  filter(Capture == 1)  %>%
+  lm(stress ~ Treatment + BibB1, data = .) %>% summary
+
+covars %>%
+  filter(Capture == 1)  %>%
+  lm(dex ~ Treatment + BibB1, data = .) %>% summary
+
+covars %>%
+  filter(Capture == 3)  %>%
+  lm(base ~ Treatment + BibB1, data = .) %>% summary
+
+covars %>%
+  lmer(base ~ Treatment * Capture + BibB1 + (1|Band), data = .,) %>%
+  summary
 
 # Model percent methylation at each gene ----------------------------------
 
@@ -131,7 +153,7 @@ methylationsummary %>% select(-nas) %>% write.csv("output_plots/methylationsumma
 #   lmer(perc_meth ~ Treatment + Capture + BibB1 + (1|Band) + (1|cpg), data = .) %>% summary
 #   ds_long %>% filter(gene == "CRHn") %>%
 # lmer(perc_meth ~ Treatment * Capture * BibB1  + (1|Band) + (1|cpg), data = .) %>% summary
-
+head(ds_long)
 
 # Methylation changes between
 # No effect of treatment or capture
@@ -190,15 +212,14 @@ tab_model(CRHn_mod, CRHR_mod,FKBP_mod, GRn_mod, auto.label = FALSE,
                         "Treatment:Capture:Initial brightness"))
 # Relationship with cort ---------------------------------------------------------------------
 # Is methylation related to baseline corticosterone levels?
-modb1 <- ds_long %>% filter(Gene == "CRH") %>% lmer(logit_meth ~ base + (1|cpg) + (1|Band), data = . )
-modb2 <- ds_long %>% filter(Gene == "CRHR1") %>% lmer(logit_meth ~ base + (1|cpg) + (1|Band), data = . )
-modb3 <- ds_long %>% filter(Gene == "FKBP5") %>% lmer(logit_meth ~ base + (1|cpg) + (1|Band), data = . )
-modb4 <- ds_long %>% filter(Gene == "GR") %>% lmer(logit_meth ~ base + (1|cpg) + (1|Band), data = . )
+modb1 <- ds_long %>% filter(Gene == "CRH") %>% lmer(logit_meth ~ base  + (1|cpg) + (1|Band), data = . )
+modb2 <- ds_long %>% filter(Gene == "CRHR1") %>% lmer(logit_meth ~ base  + (1|cpg) + (1|Band), data = . )
+modb3 <- ds_long %>% filter(Gene == "FKBP5") %>% lmer(logit_meth ~ base  + (1|cpg) + (1|Band), data = . )
+modb4 <- ds_long %>% filter(Gene == "GR") %>% lmer(logit_meth ~ base  + (1|cpg) + (1|Band), data = . )
 
 tab_model(modb1, modb2, modb3, modb4,
           dv.labels = c("CRH", "CRHR1", "FKBP5", "GR"),
           pred.labels = c("Intercept", "Baseline corticosterone"))
-
 # Relationship with stress induced corticosterone
 mods1 <- ds_long %>% filter(Gene == "CRH") %>% lmer(logit_meth ~ stress + (1|cpg) + (1|Band), data = . )
 mods2 <- ds_long %>% filter(Gene == "CRHR1") %>% lmer(logit_meth ~ stress + (1|cpg) + (1|Band), data = . )
@@ -468,4 +489,103 @@ pdf("output_plots/fig2_alternative.pdf", height = 10, width = 12 )
 (p10 + p11)/(crhr_interaction_plot + cortmethplot ) + plot_annotation(tag_levels = 'A')
 dev.off()
 
+
+# Revision  ---------------------------------------------------------------
+
+# does position in the gene matter
+head(ds_long)
+ds_long %>% filter(gene == "FKBP") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + FromATG, data = .) %>%
+  summary
+
+ds_long %>% filter(Gene == "CRH") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + FromATG, data = .) %>%
+  summary
+
+ds_long %>% filter(Gene == "GR") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + FromATG, data = .) %>%
+  summary
+
+ds_long %>% filter(Gene == "CRHR1") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + FromATG, data = .) %>%
+  summary
+
+# total methylation
+ds_long %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + (1|gene), data = .) %>%
+  summary
+
+# cort
+head(covars)
+basem <- covars %>%
+  lmer(base ~ Treatment + Capture + BibB1 + (1|Band), data = . )
+stressm <- covars %>%
+  lm(stress ~ Treatment +  BibB1, data = . )
+dexm <- covars %>%
+  lm(dex ~ Treatment +  BibB1, data = . )
+
+tab_model(basem)
+tab_model(stressm)
+tab_model(dexm)
+ds_long %>% filter(Gene == "CRHR1") %>%
+  group_by(cpg, Capture) %>%
+  summarize (Ns = sum(!is.na(perc_meth))) %>%
+  pull(Ns) %>% summary
+
+
+
+
+# Revision 2 --------------------------------------------------------------
+
+# Models without clutch size or bird age
+CRHn_mod1 <- ds_long %>% filter(gene == "CRHn") %>%
+  lmer(logit_meth ~ Treatment +  Capture + BibB1 + (1|Band) + (1|cpg), data = .)
+CRHR_mod1 <- ds_long %>% filter(gene == "CRHR") %>%
+  lmer(logit_meth ~ Treatment * Capture * BibB1 +  (1|Band) + (1|cpg), data = .)
+# Methylation significantly decreases in capture 3, no effect of treatment
+fkbp_mod1 <- ds_long %>% filter(gene == "FKBP") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg) + Age, data = .)
+# Methylation significantly increases in capture 3, no effect of treatment
+grn_mod1 <- ds_long %>% filter(gene == "GRn") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + (1|Band) + (1|cpg), data = .)
+
+# Models with clutch size and bird age
+CRHn_mod2 <- ds_long %>% filter(gene == "CRHn") %>%
+  lmer(logit_meth ~ Treatment +  Capture + BibB1 + Clutch_Size + Age + (1|Band) + (1|cpg), data = .)
+CRHR_mod2 <- ds_long %>% filter(gene == "CRHR") %>%
+  lmer(logit_meth ~ Treatment * Capture * BibB1 + Clutch_Size + Age +  (1|Band) + (1|cpg), data = .)
+# Methylation significantly decreases in capture 3, no effect of treatment
+fkbp_mod2 <- ds_long %>% filter(gene == "FKBP") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + Clutch_Size + Age + (1|Band) + (1|cpg) + Age, data = .)
+# Methylation significantly increases in capture 3, no effect of treatment
+grn_mod2 <- ds_long %>% filter(gene == "GRn") %>%
+  lmer(logit_meth ~ Treatment + Capture  + BibB1 + Clutch_Size + Age + (1|Band) + (1|cpg), data = .)
+
+#compare models
+tab_model(CRHn_mod1, CRHn_mod2, dv.labels = c("simple model", "+ age and clutch size"),
+          pred.labels = c("Intercept", "Treatment [Dulled]", "Capture [Post]", "Brightness",
+                          "Clutch Size", "Age[SY]"))
+tab_model(CRHR_mod1, CRHR_mod2, dv.labels = c("simple model", "+ age and clutch size"),
+          pred.labels = c("Intercept", "Treatment [Dulled]", "Capture [Post]", "Brightness",
+                          "Clutch Size", "Age[SY]"))
+
+tab_model(fkbp_mod1, fkbp_mod2, dv.labels = c("simple model", "+ age and clutch size"),
+          pred.labels = c("Intercept", "Treatment [Dulled]", "Capture [Post]", "Brightness",
+                          "Clutch Size", "Age[SY]"))
+tab_model(grn_mod1, grn_mod2, dv.labels = c("simple model", "+ age and clutch size"),
+          pred.labels = c("Intercept", "Treatment [Dulled]", "Capture [Post]", "Brightness",
+                          "Clutch Size", "Age[SY]"))
+
+
+# Alternative figure suggested by R2 --------------------------------------
+
+
+
+ds_long %>% filter(gene == "FKBP") %>%
+ggplot(aes(y = perc_meth, x = Capture)) +
+  geom_point(aes(color = Treatment), position = "dodge", alpha = 0.4) +
+  geom_line(aes(group = Band, color = Treatment)) +
+  facet_wrap(~ FromTSS) +
+  labs(x="Capture", y = "Percent methylation") +
+  scale_x_discrete(labels = c("Pre", "Post"))
 
